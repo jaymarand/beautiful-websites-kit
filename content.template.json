@@ -1,0 +1,72 @@
+{
+  "_meta": {
+    "slug": "",
+    "source_url": "",
+    "archetype": "",
+    "created_at": "",
+    "updated_at": "",
+    "deploy_url": "",
+    "chosen_variant": "",
+    "brand_extract_status": "fallback"
+  },
+
+  "business": {
+    "name": "",
+    "niche": "",
+    "city": "",
+    "tagline": "",
+    "phone": "",
+    "email": "",
+    "address": "",
+    "maps_url": "",
+    "opening_hours": ""
+  },
+
+  "brand": {
+    "logo_url": "",
+    "colours": [],
+    "font": ""
+  },
+
+  "agency": {
+    "domain": "",
+    "pixel_key": "",
+    "lead_id": ""
+  },
+
+  "pages": {
+
+    "home": {
+      "hero_headline": "",
+      "hero_subtext": "",
+      "trust_signals": []
+    },
+
+    "about": {
+      "headline": "",
+      "story": "",
+      "values": [
+        { "title": "", "description": "" }
+      ],
+      "team": [
+        { "name": "", "role": "", "bio": "" }
+      ],
+      "accreditations": []
+    },
+
+    "services": [
+      {
+        "name": "",
+        "slug": "",
+        "overview": "",
+        "detail": "",
+        "cta": ""
+      }
+    ],
+
+    "contact": {
+      "intro": ""
+    }
+
+  }
+}

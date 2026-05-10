@@ -84,81 +84,106 @@ If the script fails (site blocks scrapers, timeout): try again with `--timeout 6
 
 ---
 
-## Step 3: Extract Business Content
+## Step 3: Build content.json — the source of truth
 
-Read `sites/{SLUG}/page-text.txt` and `sites/{SLUG}/page-html.html`.
+`content.json` is the single source of truth for everything about this site. Every page, every edit, every redeploy reads from it. Build it once here; never scatter data across separate files.
 
-Extract the following and save to `sites/{SLUG}/content.json`:
+Start from the template:
+```bash
+cp content.template.json sites/{SLUG}/content.json
+```
+
+Now fill every field by reading `sites/{SLUG}/page-text.txt`, `sites/{SLUG}/page-html.html`, and `sites/{SLUG}/brand.json`.
+
+### 3a. `_meta` section
+```json
+"_meta": {
+  "slug": "{SLUG}",
+  "source_url": "{URL}",
+  "archetype": "",         ← fill in Step 3b
+  "created_at": "{ISO timestamp}",
+  "updated_at": "{ISO timestamp}",
+  "deploy_url": "",        ← filled after deploy
+  "chosen_variant": "",    ← filled after user picks
+  "brand_extract_status": "{success|fallback from brand.json}"
+}
+```
+
+### 3b. Archetype selection — fill `_meta.archetype`
+
+| Niche keywords | Archetype slug |
+|---|---|
+| solicitor, barrister, law firm, legal, conveyancer | `editorial-luxury` |
+| architect, architecture, interior designer | `editorial-luxury` |
+| estate agent, property, letting agent | `editorial-luxury` |
+| financial advisor, wealth manager, IFA | `editorial-luxury` |
+| dentist, dental, orthodontist | `clinical-trust` |
+| doctor, gp, clinic, physiotherapist, optician, chiropractor | `clinical-trust` |
+| nail bar, nail salon, beauty salon, spa, hair salon, lash studio, brow bar | `studio-luxe` |
+| restaurant, cafe, bakery, butcher, deli, florist, food, catering | `artisan-trade` |
+| accountant, chartered accountant, bookkeeper, tax, payroll | `corporate-precision` |
+| hr consultant, recruitment, insurance, finance broker | `corporate-precision` |
+
+Default if no match: `editorial-luxury`
+
+Read the archetype file: `cat prompts/archetypes/{archetype-slug}.md`
+
+### 3c. `business` section
+Extract from scraped text. Use only real content — empty string if not found, never a placeholder.
+
+### 3d. `brand` section
+From `brand.json`:
+- `logo_url`, `colours` (array of hex strings), `font`
+- If `extract_status` is `"fallback"`, use archetype colour defaults:
+  - `editorial-luxury`: `["#C8A96E", "#1C1410", "#8B7355"]`
+  - `clinical-trust`: `["#1A8C7D", "#0F1F3D", "#4A7B8C"]`
+  - `studio-luxe`: `["#C4956A", "#1A0F0A", "#8B6B5E"]`
+  - `artisan-trade`: `["#C4613A", "#1A0F05", "#8B6B4E"]`
+  - `corporate-precision`: `["#1E3A5F", "#1F2937", "#4A6B8C"]`
+
+### 3e. `agency` section
+Read from `.env`:
+- `domain` ← `AGENCY_DOMAIN`
+- `pixel_key` ← generate a UUID: `node -e "console.log(crypto.randomUUID())"`
+- `lead_id` ← generate a UUID
+
+### 3f. `pages.home` section
+- `hero_headline`: rewrite their main headline in premium tone, preserve their meaning
+- `hero_subtext`: one sentence — what they do and who for
+- `trust_signals`: array of 2-4 credibility facts from the site (years established, client count, accreditations, awards). Only real facts — empty array if none found.
+
+### 3g. `pages.about` section
+- `headline`: from their about page or "About {Business Name}"
+- `story`: 3-5 sentences from their about text, rewritten in premium tone, preserving all facts
+- `values`: 3-4 values or principles mentioned on the site. If none stated, derive from their about text.
+- `team`: extract any named staff with roles. Empty array if not found.
+- `accreditations`: any professional bodies, certifications, or awards mentioned. Empty array if none.
+
+### 3h. `pages.services` array
+This is the most important section. Extract every distinct service, then expand each into a full object:
 
 ```json
 {
-  "business_name": "...",
-  "niche": "solicitor | accountant | architect | dentist | estate agent | ...",
-  "city": "...",
-  "tagline": "...",
-  "services": ["Service 1", "Service 2", "..."],
-  "about_text": "...",
-  "phone": "...",
-  "email": "...",
-  "address": "..."
+  "name": "Property Law",
+  "slug": "property-law",
+  "overview": "One sentence for the services index page",
+  "detail": "3-5 sentences of full page content: what this service covers, who it's for, how the firm approaches it, why to choose this firm. Grounded in scraped content, expanded using niche knowledge. No invented specifics.",
+  "cta": "Discuss your property law needs"
 }
 ```
 
 Rules:
-- Use only real content from the scraped text. Do NOT invent anything.
-- `services`: extract every distinct service/practice area mentioned. Minimum 2, maximum 8.
-- `about_text`: 2-4 sentences summarising the firm's history, approach, or values. Exact copy from the site, not paraphrased.
-- If a field is not found on the site, use an empty string — never a placeholder.
-- `niche`: pick the closest match from the list. If unsure, use the most specific category.
+- Minimum 2 services, maximum 8
+- If fewer than 2 services are found, expand existing ones into sub-topics (e.g. "Property Law" → "Residential Conveyancing" + "Commercial Property")
+- `slug`: lowercase hyphenated from the service name
+- `detail`: this becomes the full service detail page — write it now so it's editable later
 
----
+### 3i. `pages.contact` section
+- `intro`: 1-2 sentences inviting contact. Warm, not generic.
 
-## Step 4: Brand Data
+**After completing all sections, write the final `content.json` to `sites/{SLUG}/content.json`.**
 
-Read `sites/{SLUG}/brand.json`.
-
-If `extract_status` is `"success"`: use the extracted colours and font.
-
-If `extract_status` is `"fallback"` (extraction couldn't find enough): use archetype-appropriate fallback colours (defined in Step 4.5 below after archetype selection).
-
-In the email/outreach (if this site is used for outreach later), note: "We took creative liberty with the design — we can match your exact brand colours when we talk."
-
----
-
-## Step 4.5: Select Design Archetype
-
-Based on the `niche` from `content.json`, select the design archetype. This determines the entire aesthetic personality of the site.
-
-**Niche → Archetype mapping:**
-
-| Niche keywords | Archetype | File |
-|---|---|---|
-| solicitor, barrister, law firm, legal, conveyancer | Editorial Luxury | `prompts/archetypes/editorial-luxury.md` |
-| architect, architecture, interior designer | Editorial Luxury | `prompts/archetypes/editorial-luxury.md` |
-| estate agent, property, letting agent | Editorial Luxury | `prompts/archetypes/editorial-luxury.md` |
-| financial advisor, wealth manager, IFA | Editorial Luxury | `prompts/archetypes/editorial-luxury.md` |
-| dentist, dental, orthodontist, dentistry | Clinical Trust | `prompts/archetypes/clinical-trust.md` |
-| doctor, gp, clinic, physiotherapist, optician, chiropractor, osteopath | Clinical Trust | `prompts/archetypes/clinical-trust.md` |
-| nail bar, nail salon, beauty salon, spa, hair salon, hair studio, lash studio, brow bar, bridal | Studio Luxe | `prompts/archetypes/studio-luxe.md` |
-| restaurant, cafe, bakery, butcher, deli, florist, food, catering | Artisan Trade | `prompts/archetypes/artisan-trade.md` |
-| accountant, chartered accountant, bookkeeper, tax, payroll | Corporate Precision | `prompts/archetypes/corporate-precision.md` |
-| hr consultant, recruitment, insurance, finance broker | Corporate Precision | `prompts/archetypes/corporate-precision.md` |
-
-If the niche doesn't match any keyword: use **Editorial Luxury** as the default.
-
-**Read the archetype file:**
-```bash
-cat prompts/archetypes/{archetype-slug}.md
-```
-
-Save the archetype name to `sites/{SLUG}/archetype.txt`.
-
-**Archetype-specific brand fallbacks** (use when `brand.json` extract_status is `"fallback"`):
-- Editorial Luxury: `["#C8A96E", "#1C1410", "#8B7355"]`
-- Clinical Trust: `["#1A8C7D", "#0F1F3D", "#4A7B8C"]`
-- Studio Luxe: `["#C4956A", "#1A0F0A", "#8B6B5E"]`
-- Artisan Trade: `["#C4613A", "#1A0F05", "#8B6B4E"]`
-- Corporate Precision: `["#1E3A5F", "#1F2937", "#4A6B8C"]`
+If this is a **from-scratch build** (no source site): fill the template manually from information the user provides. See "Building from Scratch" at the end of this skill.
 
 ---
 
@@ -170,9 +195,9 @@ python3 ~/.claude/skills/ui-ux-pro-max/src/ui-ux-pro-max/scripts/search.py --hel
   && echo "UX_AVAILABLE" || echo "UX_UNAVAILABLE"
 ```
 
-**If available**, run 3 searches using the detected niche:
+**If available**, run 3 searches using `content.json` fields:
 ```bash
-NICHE="{niche} {city} UK"
+NICHE="{content.business.niche} {content.business.city} UK"
 python3 ~/.claude/skills/ui-ux-pro-max/src/ui-ux-pro-max/scripts/search.py "$NICHE" --domain color --stack nextjs
 python3 ~/.claude/skills/ui-ux-pro-max/src/ui-ux-pro-max/scripts/search.py "$NICHE" --domain font --stack nextjs
 python3 ~/.claude/skills/ui-ux-pro-max/src/ui-ux-pro-max/scripts/search.py "$NICHE" --domain style --stack nextjs
@@ -204,37 +229,39 @@ Rules:
 
 Read the generation prompt template at `prompts/nextjs_generation_prompt_v1.md`.
 
-Fill every `{{VARIABLE}}` with real data:
+All variables are sourced from `sites/{SLUG}/content.json` — the single source of truth.
 
-| Variable | Source |
-|----------|--------|
-| `{{BUSINESS_NAME}}` | content.json |
-| `{{NICHE}}` | content.json |
-| `{{CITY}}` | content.json |
-| `{{TAGLINE}}` | content.json |
-| `{{SERVICES_LIST}}` | content.json — comma-separated |
-| `{{ABOUT_TEXT}}` | content.json |
-| `{{PHONE}}` | content.json |
-| `{{EMAIL}}` | content.json |
-| `{{ADDRESS}}` | content.json |
-| `{{MAPS_URL}}` | Leave empty (filled manually if needed) |
-| `{{PIXEL_KEY}}` | Leave empty — pixel tracking added later if needed |
-| `{{LEAD_ID}}` | Leave empty |
-| `{{AGENCY_DOMAIN}}` | Read from .env `AGENCY_DOMAIN`, or leave empty |
-| `{{LOGO_URL}}` | brand.json |
-| `{{BRAND_COLOURS}}` | brand.json — JSON array string |
-| `{{BRAND_FONT}}` | brand.json |
-| `{{UX_PALETTE}}` | ux-recommendations.txt or defaults |
-| `{{UX_FONTS}}` | ux-recommendations.txt or defaults |
-| `{{UX_LAYOUT}}` | ux-recommendations.txt or defaults |
-| `{{SLUG}}` | derived slug |
-| `{{BRAND_ACCENT_HEX}}` | brand_colours[0] or #C8A96E |
-| `{{BRAND_DARK_HEX}}` | brand_colours[1] or #1C1410 |
-| `{{BRAND_MUTED_HEX}}` | brand_colours[2] or #8B7355 |
+| Variable | `content.json` path |
+|----------|---------------------|
+| `{{BUSINESS_NAME}}` | `business.name` |
+| `{{NICHE}}` | `business.niche` |
+| `{{CITY}}` | `business.city` |
+| `{{TAGLINE}}` | `business.tagline` |
+| `{{SERVICES_LIST}}` | `pages.services[].name` — comma-separated |
+| `{{ABOUT_TEXT}}` | `pages.about.story` |
+| `{{PHONE}}` | `business.phone` |
+| `{{EMAIL}}` | `business.email` |
+| `{{ADDRESS}}` | `business.address` |
+| `{{MAPS_URL}}` | `business.maps_url` |
+| `{{PIXEL_KEY}}` | `agency.pixel_key` |
+| `{{LEAD_ID}}` | `agency.lead_id` |
+| `{{AGENCY_DOMAIN}}` | `agency.domain` |
+| `{{LOGO_URL}}` | `brand.logo_url` |
+| `{{BRAND_COLOURS}}` | `brand.colours` — JSON array string |
+| `{{BRAND_FONT}}` | `brand.font` |
+| `{{UX_PALETTE}}` | ux-recommendations.txt or archetype default |
+| `{{UX_FONTS}}` | ux-recommendations.txt or archetype default |
+| `{{UX_LAYOUT}}` | ux-recommendations.txt or archetype default |
+| `{{SLUG}}` | `_meta.slug` |
+| `{{BRAND_ACCENT_HEX}}` | `brand.colours[0]` |
+| `{{BRAND_DARK_HEX}}` | `brand.colours[1]` |
+| `{{BRAND_MUTED_HEX}}` | `brand.colours[2]` |
 | `{{DISPLAY_FONT}}` | from UX_FONTS or archetype default |
 | `{{BODY_FONT}}` | from UX_FONTS or archetype default |
-| `{{ARCHETYPE_NAME}}` | from `sites/{SLUG}/archetype.txt` |
-| `{{ARCHETYPE_DIRECTIVES}}` | full content of the archetype file (e.g. `prompts/archetypes/editorial-luxury.md`) |
+| `{{ARCHETYPE_NAME}}` | `_meta.archetype` |
+| `{{ARCHETYPE_DIRECTIVES}}` | full content of `prompts/archetypes/{_meta.archetype}.md` |
+
+The generation prompt also receives the full `pages` object so service detail pages are generated from `pages.services[].detail` — not invented on the fly.
 
 Now generate ALL required files. Write the base variant to `sites/{SLUG}/variants/v1-archetype/`:
 
@@ -445,9 +472,21 @@ npx wrangler pages deploy "sites/{SLUG}/variants/{chosen-dir}/out" \
 
 ---
 
-## Step 10: Log and Report
+## Step 10: Update content.json, Log, and Report
 
-1. Update `sites/build-log.md`:
+### 1. Write back to content.json
+Update these fields now that the site is live:
+```json
+"_meta": {
+  "deploy_url": "{CLOUDFLARE_URL}",
+  "chosen_variant": "{V1|V2|V3|I1|I2}",
+  "updated_at": "{ISO timestamp}"
+}
+```
+
+`content.json` is now the complete record of this site — everything needed to edit, expand, or rebuild it is in one file.
+
+### 2. Update `sites/build-log.md`
 ```markdown
 ## {BUSINESS_NAME} — {date}
 - Slug: {SLUG}
@@ -457,32 +496,84 @@ npx wrangler pages deploy "sites/{SLUG}/variants/{chosen-dir}/out" \
 - Variant chosen: {V1|V2|V3|I1|I2} — {variant label}
 - Design: {palette description} / {fonts} / {hero layout}
 - Brand status: {success|fallback}
-- Variants built: {list of all variants attempted}
 ```
 
-2. Report to user:
+### 3. Report to user
 ```
 ✅ Done.
 
 Business:  {BUSINESS_NAME}
-Source:    {URL}
 Live site: {CLOUDFLARE_URL}
 
 Pages: Home · About · Services ({count}) · Contact
 Archetype: {archetype name}
 Chosen:    {variant label}
 Design:    {one-line description of the aesthetic}
-Brand:     {success — matched their colours | fallback — archetype defaults used}
-Build:     {next build output: X pages, Y kB}
+
+To edit this site later: update sites/{SLUG}/content.json then run /redeploy {SLUG}
 ```
 
-3. Show the live URL prominently so the user can click it immediately.
+Show the live URL prominently so the user can click it immediately.
+
+---
+
+## Editing a Deployed Site
+
+All site content lives in `sites/{SLUG}/content.json`. To make any change:
+
+1. Edit the relevant field in `content.json`
+2. Tell Claude Code: **`/redeploy {SLUG}`** (or manually rebuild and deploy)
+
+**Common edits:**
+
+| What to change | Field in content.json |
+|---|---|
+| Phone number | `business.phone` |
+| Address | `business.address` |
+| Tagline | `business.tagline` |
+| About story | `pages.about.story` |
+| Add a team member | Append to `pages.about.team[]` |
+| Edit a service description | `pages.services[n].detail` |
+| Add a new service | Append to `pages.services[]` with name, slug, overview, detail, cta |
+| Add an accreditation | Append to `pages.about.accreditations[]` |
+| Update trust signals | Edit `pages.home.trust_signals[]` |
+
+After editing `content.json`, rebuild and redeploy the chosen variant:
+```bash
+cd sites/{SLUG}/variants/{chosen-variant-dir}
+npx next build
+export $(grep -v '^#' ../../../.env | xargs) 2>/dev/null || true
+npx wrangler pages deploy out --project-name {SLUG} --commit-dirty=true
+```
+
+---
+
+## Building from Scratch (no source site)
+
+Use this when the business has no existing website, or you're building a speculative site for a niche.
+
+```bash
+cp content.template.json sites/{SLUG}/content.json
+```
+
+Fill `content.json` from information the user provides or from niche knowledge:
+
+- `business.*` — user provides name, city, phone, email, address
+- `brand.*` — leave colours empty; archetype fallbacks will apply
+- `pages.services[]` — ask the user for their service list, or use niche defaults:
+  - Solicitor defaults: Residential Conveyancing, Commercial Property, Wills & Probate, Family Law, Employment Law
+  - Accountant defaults: Bookkeeping, Self-Assessment Tax Returns, VAT Returns, Payroll, Business Accounts
+  - Dentist defaults: General Dentistry, Teeth Whitening, Dental Implants, Invisalign, Emergency Dentistry
+  - Nail bar defaults: Gel Nails, Acrylic Nails, Nail Art, Manicure, Pedicure
+  - Restaurant defaults: Dine In, Private Hire, Takeaway, Catering
+
+Once `content.json` is complete, skip Steps 1-2 (no scraping needed) and continue from Step 4 (ui-ux-pro-max) onwards.
 
 ---
 
 ## If Anything Goes Wrong
 
-- **Scrape fails**: site blocks bots. Try `node scripts/scrape-site.js {URL} sites/{SLUG} --timeout 60000`. If still failing, ask the user to paste the text content manually.
-- **Build fails after 3 attempts**: paste the error and stop. Don't guess endlessly.
-- **Deploy fails**: check `CLOUDFLARE_API_TOKEN` permissions. Token needs "Cloudflare Pages: Edit" scope.
-- **No services found on the site**: ask the user "I couldn't find any specific services listed on their site. What services should I include?"
+- **Scrape fails**: Try `node scripts/scrape-site.js {URL} sites/{SLUG} --timeout 60000`. If still failing, ask the user to paste the text content — fill `content.json` manually from what they provide.
+- **Build fails after 3 attempts**: Show the error and stop. Don't guess endlessly.
+- **Deploy fails**: Check `CLOUDFLARE_API_TOKEN` permissions — needs "Cloudflare Pages: Edit" scope.
+- **No services found**: Ask "What services should I include?" then add them directly to `pages.services[]` in content.json.

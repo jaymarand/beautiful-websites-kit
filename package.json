@@ -1,0 +1,17 @@
+{
+  "name": "beautiful-websites-kit",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "URL → premium Next.js site → Cloudflare Pages",
+  "scripts": {
+    "screenshot": "node scripts/screenshot.js",
+    "scrape": "node scripts/scrape-site.js",
+    "variants": "node scripts/screenshot-variants.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}

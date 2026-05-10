@@ -1,0 +1,26 @@
+# Environment variables — contains API tokens, never commit
+.env
+
+# Generated site output — too large, rebuilt on each run
+sites/*/
+!sites/build-log.md
+
+# Node modules (inside generated Next.js sites)
+node_modules/
+sites/**/node_modules/
+sites/**/.next/
+sites/**/out/
+
+# Cloudflare / Vercel deploy artifacts
+.vercel/
+sites/**/.vercel/
+
+# Playwright browser binaries
+playwright-report/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Screenshots (regenerated on each run)
+screenshots/
